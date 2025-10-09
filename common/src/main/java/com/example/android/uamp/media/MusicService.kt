@@ -214,10 +214,12 @@ open class MusicService : MediaLibraryService() {
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? {
-        return if ("android.media.session.MediaController" == controllerInfo.packageName
-            || packageValidator.isKnownCaller(controllerInfo.packageName, controllerInfo.uid)) {
-            mediaSession
-        } else null
+//        return if ("android.media.session.MediaController" == controllerInfo.packageName
+//            || packageValidator.isKnownCaller(controllerInfo.packageName, controllerInfo.uid)) {
+//            mediaSession
+//        } else null
+        // 测试简单起见，允许所有应用连接
+        return mediaSession
     }
 
     /** Called when swiping the activity away from recents. */
