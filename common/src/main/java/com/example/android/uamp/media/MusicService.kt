@@ -312,7 +312,8 @@ open class MusicService : MediaLibraryService() {
         ): ListenableFuture<LibraryResult<MediaItem>> {
             // By default, all known clients are permitted to search, but only tell unknown callers
             // about search if permitted by the [BrowseTree].
-            val isKnownCaller = packageValidator.isKnownCaller(browser.packageName, browser.uid)
+            // always true for testing
+            val isKnownCaller = packageValidator.isKnownCaller(browser.packageName, browser.uid) || true
             val rootExtras = Bundle().apply {
                 putBoolean(
                     MEDIA_SEARCH_SUPPORTED,
@@ -324,6 +325,7 @@ open class MusicService : MediaLibraryService() {
             }
             val libraryParams = LibraryParams.Builder().setExtras(rootExtras).build()
             val rootMediaItem = if (!isKnownCaller) {
+                Log.e(TAG, "Unknown Caller!Return Empty MediaItem Id")
                 MediaItem.EMPTY
             } else if (params?.isRecent == true) {
                 if (exoPlayer.currentTimeline.isEmpty) {

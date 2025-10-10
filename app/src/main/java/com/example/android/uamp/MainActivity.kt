@@ -43,7 +43,8 @@ class MainActivity : AppCompatActivity() {
 
         // Initialize the Cast context. This is required so that the media route button can be
         // created in the AppBar
-        castContext = CastContext.getSharedInstance(this)
+        // castContext = CastContext.getSharedInstance(this)
+
 
         setContentView(R.layout.activity_main)
 
