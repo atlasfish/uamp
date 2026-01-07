@@ -81,6 +81,7 @@ class BrowseTree(
                 )
             )
             setFolderType(MediaMetadata.FOLDER_TYPE_MIXED)
+            setIsBrowsable(true)
             setIsPlayable(false)
         }.build()
         rootList += MediaItem.Builder().apply {
@@ -97,6 +98,7 @@ class BrowseTree(
                 )
             )
             setIsPlayable(false)
+            setIsBrowsable(true)
             setFolderType(MediaMetadata.FOLDER_TYPE_ALBUMS)
         }.build()
         rootList += MediaItem.Builder().apply {
@@ -111,8 +113,16 @@ class BrowseTree(
             albumChildren += mediaItem
 
             Log.d("BrowseTree", "loading catalogue for " + mediaItem.mediaId)
+
+            // 调试日志：检查 trackNumber 的值
+            val trackNum = mediaItem.mediaMetadata.trackNumber
+            Log.d("BrowseTree", "Check Recommend: mediaId=${mediaItem.mediaId}, trackNumber=$trackNum")
+
             // Add the first track of each album to the 'Recommended' category
-            if (mediaItem.mediaMetadata.trackNumber == 1) {
+            // 如果 JSON 中没有 trackNumber (默认为0)，这个条件将永远为 false
+            if (mediaItem.mediaMetadata.trackNumber == 1 || mediaItem.mediaMetadata.trackNumber == 0) {
+                // 临时修复：如果是 0 (默认值) 也加入推荐，或者你可以完全去掉这个 if 条件把所有歌都加进去
+                Log.d("BrowseTree", "adding to recommended: " + mediaItem.mediaId)
                 val recommendedChildren = mediaIdToChildren[UAMP_RECOMMENDED_ROOT]
                     ?: mutableListOf()
                 recommendedChildren += mediaItem
@@ -148,6 +158,10 @@ class BrowseTree(
         // Create the album and add it to the 'Albums' category.
         val albumMetadata = mediaItem.mediaMetadata.buildUpon().apply {
             setFolderType(MediaMetadata.FOLDER_TYPE_ALBUMS)
+            setIsBrowsable(true)
+            // UAMP Config: Albums are folders and generally not playable directly as a single item in this implementation.
+            // If you want albums to be playable (e.g. play all tracks), you would change this to true
+            // and handle the playback logic for the group.
             setIsPlayable(false)
         }.build()
         val albumMediaItem= mediaItem.buildUpon().apply {

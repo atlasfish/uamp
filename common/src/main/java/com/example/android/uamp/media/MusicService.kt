@@ -124,7 +124,7 @@ open class MusicService : MediaLibraryService() {
     }
 
     private val remoteJsonSource: Uri =
-        Uri.parse("https://storage.googleapis.com/uamp/catalog.json")
+        Uri.parse("http://10.0.2.2:8000/music_list.json")
 
     private val uAmpAudioAttributes = AudioAttributes.Builder()
         .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)

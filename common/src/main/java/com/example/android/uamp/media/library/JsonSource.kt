@@ -18,6 +18,7 @@ package com.example.android.uamp.media.library
 
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
@@ -99,6 +100,9 @@ internal class JsonSource(private val source: Uri) : AbstractMusicSource() {
                         setExtras(extras)
                     }
                     .build()
+
+                Log.d("JsonSource", "Loaded song: ${song.title}, isPlayable: ${mediaMetadata.isPlayable}, mediaId: ${song.id}, album: ${song.album}")
+
                 MediaItem.Builder()
                     .apply {
                         setMediaId(song.id)
@@ -139,6 +143,9 @@ fun MediaMetadata.Builder.from(jsonMusic: JsonMusic): MediaMetadata.Builder {
     setTrackNumber(jsonMusic.trackNumber.toInt())
     setTotalTrackCount(jsonMusic.totalTrackCount.toInt())
     setFolderType(MediaMetadata.FOLDER_TYPE_NONE)
+    setIsBrowsable(false)
+    // UAMP Config: This is where the isPlayable property for individual songs is configured.
+    // Ensure this is set to true for songs so they can be played by the client.
     setIsPlayable(true)
     // The duration from the JSON is given in seconds, but the rest of the code works in
     // milliseconds. Here's where we convert to the proper units.
