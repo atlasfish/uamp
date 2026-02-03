@@ -206,4 +206,7 @@ class JsonMusic {
     var totalTrackCount: Long = 0
     var duration: Long = -1
     var site: String = ""
+    var tags: List<String> = emptyList()
+    var isList: Boolean = false
+    var likes: Int = 0
 }
