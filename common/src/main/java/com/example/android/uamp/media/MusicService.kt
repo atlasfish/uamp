@@ -64,6 +64,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
 import kotlin.math.max
+import kotlin.text.get
 
 /**
  * Service for browsing the catalogue and and receiving a [MediaController] from the app's UI
@@ -352,19 +353,27 @@ open class MusicService : MediaLibraryService() {
                 return Futures.immediateFuture(
                     LibraryResult.ofItemList(
                         storage.loadRecentSong()?.let {
-                            song -> listOf(song)
+                                song -> listOf(song)
                         }!!,
                         LibraryParams.Builder().build()
                     )
                 )
             }
             return callWhenMusicSourceReady {
+                val children = browseTree[parentId] ?: ImmutableList.of()
+
+                // === 修复开始: 实现分页逻辑以避免 Binder 超过 1MB 限制 ===
+                val fromIndex = (page * pageSize).coerceIn(0, children.size)
+                val toIndex = (fromIndex + pageSize).coerceIn(fromIndex, children.size)
+
                 LibraryResult.ofItemList(
-                    browseTree[parentId] ?: ImmutableList.of(),
+                    children.subList(fromIndex, toIndex),
                     LibraryParams.Builder().build()
                 )
+                // === 修复结束 ===
             }
         }
+
 
         override fun onGetItem(
             session: MediaLibrarySession,
