@@ -76,12 +76,15 @@ abstract class ApiSource(private val endpoint: String) : AbstractMusicSource() {
      */
     protected suspend fun <T> downloadJson(url: String, clazz: Class<T>): T? {
         return withContext(Dispatchers.IO) {
+            var jsonString = ""
             try {
                 val connection = URL(url)
                 val reader = BufferedReader(InputStreamReader(connection.openStream()))
-                Gson().fromJson(reader, clazz)
-            } catch (e: IOException) {
-                Log.e(TAG, "Error downloading JSON from $url", e)
+                jsonString = reader.readText()
+                Log.d(TAG, "Response from $url: ${jsonString.take(1000)}")
+                Gson().fromJson(jsonString, clazz)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error downloading JSON from $url. Response start: ${jsonString.take(500)}", e)
                 null
             }
         }
@@ -98,7 +101,9 @@ abstract class ApiSource(private val endpoint: String) : AbstractMusicSource() {
             BASE_URL + song.source
         }
         
-        val imageUrl = if (song.image.startsWith("http")) {
+        val imageUrl = if (song.image.isEmpty()) {
+            ""
+        } else if (song.image.startsWith("http")) {
             song.image
         } else {
             BASE_URL + song.image
@@ -140,8 +145,8 @@ abstract class ApiSource(private val endpoint: String) : AbstractMusicSource() {
  */
 class DailyRecommendSource : ApiSource("/api/recommend/daily") {
     override suspend fun fetchAndParseCatalog(url: String): List<MediaItem>? {
-        val response = downloadJson(url, Array<JsonMusic>::class.java) ?: return null
-        return response.map { jsonMusicToMediaItem(it) }
+        val response = downloadJson(url, JsonCatalog::class.java) ?: return null
+        return response.music.map { jsonMusicToMediaItem(it) }
     }
 }
 
@@ -150,8 +155,8 @@ class DailyRecommendSource : ApiSource("/api/recommend/daily") {
  */
 class GuessLikeSource : ApiSource("/api/recommend/guess") {
     override suspend fun fetchAndParseCatalog(url: String): List<MediaItem>? {
-        val response = downloadJson(url, Array<JsonMusic>::class.java) ?: return null
-        return response.map { jsonMusicToMediaItem(it) }
+        val response = downloadJson(url, JsonCatalog::class.java) ?: return null
+        return response.music.map { jsonMusicToMediaItem(it) }
     }
 }
 
@@ -160,8 +165,8 @@ class GuessLikeSource : ApiSource("/api/recommend/guess") {
  */
 class PopularSource : ApiSource("/api/recommend/popular") {
     override suspend fun fetchAndParseCatalog(url: String): List<MediaItem>? {
-        val response = downloadJson(url, Array<JsonMusic>::class.java) ?: return null
-        return response.map { jsonMusicToMediaItem(it) }
+        val response = downloadJson(url, JsonCatalog::class.java) ?: return null
+        return response.music.map { jsonMusicToMediaItem(it) }
     }
 }
 
@@ -170,8 +175,8 @@ class PopularSource : ApiSource("/api/recommend/popular") {
  */
 class TreasuredPlaylistsSource : ApiSource("/api/playlists/treasured") {
     override suspend fun fetchAndParseCatalog(url: String): List<MediaItem>? {
-        val response = downloadJson(url, Array<ApiPlaylist>::class.java) ?: return null
-        return response.flatMap { playlist ->
+        val response = downloadJson(url, ApiPlaylistsResponse::class.java) ?: return null
+        return response.playlists.flatMap { playlist ->
             // For playlists, we return the songs within them as MediaItems
             // Each playlist becomes a browsable folder
             playlist.songs.map { song -> 
@@ -204,10 +209,10 @@ class AllSongsApiSource : ApiSource("/api/songs?pageSize=50") {
  */
 class AllPlaylistsSource : ApiSource("/api/playlists") {
     override suspend fun fetchAndParseCatalog(url: String): List<MediaItem>? {
-        val response = downloadJson(url, Array<ApiPlaylist>::class.java) ?: return null
-        
+        val response = downloadJson(url, ApiPlaylistsResponse::class.java) ?: return null
+
         // Convert playlists to browsable MediaItems
-        return response.mapNotNull { playlist ->
+        return response.playlists.mapNotNull { playlist ->
             // Create a folder-type MediaItem for the playlist
             val playlistMetadata = MediaMetadata.Builder()
                 .setTitle(playlist.title)

@@ -58,6 +58,7 @@ import com.example.android.uamp.media.library.PopularSource
 import com.example.android.uamp.media.library.TreasuredPlaylistsSource
 import com.example.android.uamp.media.library.AllSongsApiSource
 import com.example.android.uamp.media.library.AllPlaylistsSource
+import com.example.android.uamp.media.library.AbstractMusicSource
 import com.example.android.uamp.media.library.STATE_INITIALIZED
 import com.example.android.uamp.media.library.STATE_ERROR
 import com.example.android.uamp.media.library.UAMP_BROWSABLE_ROOT
@@ -329,14 +330,14 @@ open class MusicService : MediaLibraryService() {
      * @param action The function to be called when all sources are ready.
      */
     private fun <T> callWhenSourcesReady(action: () -> T): ListenableFuture<T> {
-        val sources = listOf(
-            musicSource, 
-            dailyRecommendSource, 
-            guessLikeSource, 
-            popularSource, 
-            treasuredPlaylistsSource,
-            allSongsSource,
-            allPlaylistsSource as MusicSource
+        val sources = listOf<AbstractMusicSource>(
+            musicSource as AbstractMusicSource,
+            dailyRecommendSource as AbstractMusicSource,
+            guessLikeSource as AbstractMusicSource,
+            popularSource as AbstractMusicSource,
+            treasuredPlaylistsSource as AbstractMusicSource,
+            allSongsSource as AbstractMusicSource,
+            allPlaylistsSource
         )
         
         // Check if all sources are ready

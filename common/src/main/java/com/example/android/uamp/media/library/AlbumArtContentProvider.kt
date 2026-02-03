@@ -36,11 +36,15 @@ internal class AlbumArtContentProvider : ContentProvider() {
         private val uriMap = mutableMapOf<Uri, Uri>()
 
         fun mapUri(uri: Uri): Uri {
-            val path = uri.encodedPath?.substring(1)?.replace('/', ':') ?: return Uri.EMPTY
+            val path = uri.encodedPath
+            if (path.isNullOrEmpty() || path.length <= 1) {
+                return Uri.EMPTY
+            }
+            val contentPath = path.substring(1).replace('/', ':')
             val contentUri = Uri.Builder()
                 .scheme(ContentResolver.SCHEME_CONTENT)
                 .authority("com.example.android.uamp")
-                .path(path)
+                .path(contentPath)
                 .build()
             uriMap[contentUri] = uri
             return contentUri
