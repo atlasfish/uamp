@@ -115,6 +115,8 @@ abstract class ApiSource(private val endpoint: String) : AbstractMusicSource() {
                 extras.putString(JsonSource.ORIGINAL_ARTWORK_URI_KEY, jsonImageUri.toString())
                 extras.putInt("likes", song.likes)
                 extras.putBoolean("isList", song.isList)
+                // Store tags as ArrayList for easier retrieval
+                extras.putStringArrayList("tags", ArrayList(song.tags))
                 setExtras(extras)
             }
             .build()
