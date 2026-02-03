@@ -51,6 +51,15 @@ import com.example.android.uamp.media.library.BrowseTree
 import com.example.android.uamp.media.library.JsonSource
 import com.example.android.uamp.media.library.MEDIA_SEARCH_SUPPORTED
 import com.example.android.uamp.media.library.MusicSource
+import com.example.android.uamp.media.library.MultiBrowseTree
+import com.example.android.uamp.media.library.DailyRecommendSource
+import com.example.android.uamp.media.library.GuessLikeSource
+import com.example.android.uamp.media.library.PopularSource
+import com.example.android.uamp.media.library.TreasuredPlaylistsSource
+import com.example.android.uamp.media.library.AllSongsApiSource
+import com.example.android.uamp.media.library.AllPlaylistsSource
+import com.example.android.uamp.media.library.STATE_INITIALIZED
+import com.example.android.uamp.media.library.STATE_ERROR
 import com.example.android.uamp.media.library.UAMP_BROWSABLE_ROOT
 import com.example.android.uamp.media.library.UAMP_RECENT_ROOT
 import com.google.android.gms.cast.framework.CastContext
@@ -87,15 +96,30 @@ open class MusicService : MediaLibraryService() {
     private var currentMediaItemIndex: Int = 0
 
     private lateinit var musicSource: MusicSource
+    private lateinit var dailyRecommendSource: MusicSource
+    private lateinit var guessLikeSource: MusicSource
+    private lateinit var popularSource: MusicSource
+    private lateinit var treasuredPlaylistsSource: MusicSource
+    private lateinit var allSongsSource: MusicSource
+    private lateinit var allPlaylistsSource: AllPlaylistsSource
     private lateinit var packageValidator: PackageValidator
     private lateinit var storage: PersistentStorage
 
     /**
-     * This must be `by lazy` because the [musicSource] won't initially be ready. Use
-     * [callWhenMusicSourceReady] to be sure it is safely ready for usage.
+     * This must be `by lazy` because the sources won't initially be ready. Use
+     * [callWhenSourcesReady] to be sure they are safely ready for usage.
      */
-    private val browseTree: BrowseTree by lazy {
-        BrowseTree(applicationContext, musicSource)
+    private val multiBrowseTree: MultiBrowseTree by lazy {
+        MultiBrowseTree(
+            applicationContext,
+            musicSource,
+            dailyRecommendSource,
+            guessLikeSource,
+            popularSource,
+            treasuredPlaylistsSource,
+            allSongsSource,
+            allPlaylistsSource
+        )
     }
 
     private val recentRootMediaItem: MediaItem by lazy {
@@ -202,12 +226,24 @@ open class MusicService : MediaLibraryService() {
             build()
         }
 
-        // The media library is built from a remote JSON file. We start loading asynchronously here.
-        // Use [callWhenMusicSourceReady] to execute code that needs the source load being
-        // completed.
+        // Initialize all music sources from MockServer API endpoints
         musicSource = JsonSource(source = remoteJsonSource)
+        dailyRecommendSource = DailyRecommendSource()
+        guessLikeSource = GuessLikeSource()
+        popularSource = PopularSource()
+        treasuredPlaylistsSource = TreasuredPlaylistsSource()
+        allSongsSource = AllSongsApiSource()
+        allPlaylistsSource = AllPlaylistsSource()
+        
+        // Load all sources asynchronously
         serviceScope.launch {
             musicSource.load()
+            dailyRecommendSource.load()
+            guessLikeSource.load()
+            popularSource.load()
+            treasuredPlaylistsSource.load()
+            allSongsSource.load()
+            allPlaylistsSource.load()
         }
 
         packageValidator = PackageValidator(this, R.xml.allowed_media_browser_callers)
@@ -256,24 +292,22 @@ open class MusicService : MediaLibraryService() {
         val currentMediaItem = replaceableForwardingPlayer.currentMediaItem ?: return
         serviceScope.launch {
             val mediaItem =
-                browseTree.getMediaItemByMediaId(currentMediaItem.mediaId) ?: return@launch
+                multiBrowseTree.getMediaItemByMediaId(currentMediaItem.mediaId) ?: return@launch
             storage.saveRecentSong(mediaItem, replaceableForwardingPlayer.currentPosition)
         }
     }
 
     private fun preparePlayerForResumption(mediaItem: MediaItem) {
-        musicSource.whenReady {
-            if (it) {
-                val playableMediaItem = browseTree.getMediaItemByMediaId(mediaItem.mediaId)
-                val startPositionMs =
-                    mediaItem.mediaMetadata.extras?.getLong(
-                        MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS
-                    ) ?: 0
-                playableMediaItem?.let {
-                    exoPlayer.setMediaItem(playableMediaItem)
-                    exoPlayer.seekTo(startPositionMs)
-                    exoPlayer.prepare()
-                }
+        callWhenSourcesReady {
+            val playableMediaItem = multiBrowseTree.getMediaItemByMediaId(mediaItem.mediaId)
+            val startPositionMs =
+                mediaItem.mediaMetadata.extras?.getLong(
+                    MEDIA_DESCRIPTION_EXTRAS_START_PLAYBACK_POSITION_MS
+                ) ?: 0
+            playableMediaItem?.let {
+                exoPlayer.setMediaItem(playableMediaItem)
+                exoPlayer.seekTo(startPositionMs)
+                exoPlayer.prepare()
             }
         }
     }
@@ -288,11 +322,54 @@ open class MusicService : MediaLibraryService() {
     }
 
     /**
-     * Returns a future that executes the action when the music source is ready. This may be an
-     * immediate execution if the music source is ready, or a deferred asynchronous execution if the
-     * music source is still loading.
+     * Returns a future that executes the action when all music sources are ready. This may be an
+     * immediate execution if all sources are ready, or a deferred asynchronous execution if any
+     * source is still loading.
      *
-     * @param action The function to be called when the music source is ready.
+     * @param action The function to be called when all sources are ready.
+     */
+    private fun <T> callWhenSourcesReady(action: () -> T): ListenableFuture<T> {
+        val sources = listOf(
+            musicSource, 
+            dailyRecommendSource, 
+            guessLikeSource, 
+            popularSource, 
+            treasuredPlaylistsSource,
+            allSongsSource,
+            allPlaylistsSource as MusicSource
+        )
+        
+        // Check if all sources are ready
+        val allReady = sources.all { source ->
+            when (source.state) {
+                STATE_INITIALIZED -> true
+                STATE_ERROR -> {
+                    Log.w(TAG, "Source in error state, considering as ready")
+                    true
+                }
+                else -> false
+            }
+        }
+        
+        return if (allReady) {
+            Futures.immediateFuture(action())
+        } else {
+            executorService.submit<T> {
+                // Wait for all sources to be ready
+                sources.forEach { source ->
+                    val conditionVariable = ConditionVariable()
+                    if (!source.whenReady(openWhenReady(conditionVariable))) {
+                        conditionVariable.block()
+                    }
+                }
+                action()
+            }
+        }
+    }
+
+    /**
+     * Returns a future that executes the action when the main music source is ready.
+     * This is kept for backward compatibility with code that only needs the main source.
      */
     private fun <T> callWhenMusicSourceReady(action: () -> T): ListenableFuture<T> {
         val conditionVariable = ConditionVariable()
@@ -300,7 +377,7 @@ open class MusicService : MediaLibraryService() {
             Futures.immediateFuture(action())
         } else {
             executorService.submit<T> {
-                conditionVariable.block();
+                conditionVariable.block()
                 action()
             }
         }
@@ -312,13 +389,13 @@ open class MusicService : MediaLibraryService() {
             session: MediaLibrarySession, browser: MediaSession.ControllerInfo, params: LibraryParams?
         ): ListenableFuture<LibraryResult<MediaItem>> {
             // By default, all known clients are permitted to search, but only tell unknown callers
-            // about search if permitted by the [BrowseTree].
+            // about search if permitted by the [MultiBrowseTree].
             // always true for testing
             val isKnownCaller = packageValidator.isKnownCaller(browser.packageName, browser.uid) || true
             val rootExtras = Bundle().apply {
                 putBoolean(
                     MEDIA_SEARCH_SUPPORTED,
-                    isKnownCaller || browseTree.searchableByUnknownCaller
+                    isKnownCaller || multiBrowseTree.searchableByUnknownCaller
                 )
                 putBoolean(CONTENT_STYLE_SUPPORTED, true)
                 putInt(CONTENT_STYLE_BROWSABLE_HINT, CONTENT_STYLE_GRID)
@@ -359,10 +436,35 @@ open class MusicService : MediaLibraryService() {
                     )
                 )
             }
-            return callWhenMusicSourceReady {
-                val children = browseTree[parentId] ?: ImmutableList.of()
+            
+            // Handle playlist expansion - if parentId starts with "playlist_"
+            if (parentId.startsWith("playlist_")) {
+                val playlistId = parentId.removePrefix("playlist_")
+                return executorService.submit<LibraryResult<ImmutableList<MediaItem>>> {
+                    // Use coroutine to load playlist songs
+                    val songs = kotlinx.coroutines.runBlocking {
+                        multiBrowseTree.getPlaylistSongs(playlistId)
+                    }
+                    if (songs != null) {
+                        val fromIndex = (page * pageSize).coerceIn(0, songs.size)
+                        val toIndex = (fromIndex + pageSize).coerceIn(fromIndex, songs.size)
+                        LibraryResult.ofItemList(
+                            songs.subList(fromIndex, toIndex),
+                            LibraryParams.Builder().build()
+                        )
+                    } else {
+                        LibraryResult.ofItemList(
+                            ImmutableList.of(),
+                            LibraryParams.Builder().build()
+                        )
+                    }
+                }
+            }
+            
+            return callWhenSourcesReady {
+                val children = multiBrowseTree[parentId] ?: ImmutableList.of()
 
-                // === 修复开始: 实现分页逻辑以避免 Binder 超过 1MB 限制 ===
+                // === Implement pagination logic to avoid Binder exceeding 1MB limit ===
                 val fromIndex = (page * pageSize).coerceIn(0, children.size)
                 val toIndex = (fromIndex + pageSize).coerceIn(fromIndex, children.size)
 
@@ -370,7 +472,6 @@ open class MusicService : MediaLibraryService() {
                     children.subList(fromIndex, toIndex),
                     LibraryParams.Builder().build()
                 )
-                // === 修复结束 ===
             }
         }
 
@@ -380,21 +481,76 @@ open class MusicService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             mediaId: String
         ): ListenableFuture<LibraryResult<MediaItem>> {
-            return callWhenMusicSourceReady {
+            return callWhenSourcesReady {
                 LibraryResult.ofItem(
-                    browseTree.getMediaItemByMediaId(mediaId) ?: MediaItem.EMPTY,
+                    multiBrowseTree.getMediaItemByMediaId(mediaId) ?: MediaItem.EMPTY,
                     LibraryParams.Builder().build())
             }
         }
 
+        /**
+         * Enhanced onSearch implementation that supports filtering through MediaBrowser.
+         * Supports filtering by:
+         * - query: text search across title, artist, album, genre
+         * - extras in LibraryParams:
+         *   - "genre": filter by specific genre
+         *   - "artist": filter by specific artist
+         *   - "album": filter by specific album
+         *   - "tag": filter by specific tag
+         *   - "minLikes": filter by minimum likes count
+         */
         override fun onSearch(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
             query: String,
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<Void>> {
-            return callWhenMusicSourceReady {
-                val searchResult = musicSource.search(query, params?.extras ?: Bundle())
+            return callWhenSourcesReady {
+                val extras = params?.extras ?: Bundle()
+                
+                // Start with search results from all sources
+                var searchResult = multiBrowseTree.searchAll(query, extras)
+                
+                // Apply additional filters from params if provided
+                extras.getString("genre")?.let { genre ->
+                    searchResult = searchResult.filter { 
+                        it.mediaMetadata.genre?.toString() == genre 
+                    }
+                    Log.d(TAG, "Filtered by genre: $genre, results: ${searchResult.size}")
+                }
+                
+                extras.getString("artist")?.let { artist ->
+                    searchResult = searchResult.filter { item ->
+                        item.mediaMetadata.artist?.toString() == artist ||
+                        item.mediaMetadata.albumArtist?.toString() == artist
+                    }
+                    Log.d(TAG, "Filtered by artist: $artist, results: ${searchResult.size}")
+                }
+                
+                extras.getString("album")?.let { album ->
+                    searchResult = searchResult.filter { 
+                        it.mediaMetadata.albumTitle?.toString() == album 
+                    }
+                    Log.d(TAG, "Filtered by album: $album, results: ${searchResult.size}")
+                }
+                
+                extras.getString("tag")?.let { tag ->
+                    searchResult = searchResult.filter { item ->
+                        item.mediaMetadata.extras?.getStringArrayList("tags")?.contains(tag) ?: false
+                    }
+                    Log.d(TAG, "Filtered by tag: $tag, results: ${searchResult.size}")
+                }
+                
+                extras.getInt("minLikes", -1).let { minLikes ->
+                    if (minLikes >= 0) {
+                        searchResult = searchResult.filter { item ->
+                            (item.mediaMetadata.extras?.getInt("likes") ?: 0) >= minLikes
+                        }
+                        Log.d(TAG, "Filtered by minLikes: $minLikes, results: ${searchResult.size}")
+                    }
+                }
+                
+                Log.d(TAG, "Search completed. Query: '$query', Total results: ${searchResult.size}")
                 mediaSession.notifySearchResultChanged(browser, query, searchResult.size, params)
                 LibraryResult.ofVoid()
             }
@@ -408,8 +564,44 @@ open class MusicService : MediaLibraryService() {
             pageSize: Int,
             params: LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-            return callWhenMusicSourceReady {
-                val searchResult = musicSource.search(query, params?.extras ?: Bundle())
+            return callWhenSourcesReady {
+                val extras = params?.extras ?: Bundle()
+                var searchResult = multiBrowseTree.searchAll(query, extras)
+                
+                // Apply the same filters as in onSearch
+                extras.getString("genre")?.let { genre ->
+                    searchResult = searchResult.filter { 
+                        it.mediaMetadata.genre?.toString() == genre 
+                    }
+                }
+                
+                extras.getString("artist")?.let { artist ->
+                    searchResult = searchResult.filter { item ->
+                        item.mediaMetadata.artist?.toString() == artist ||
+                        item.mediaMetadata.albumArtist?.toString() == artist
+                    }
+                }
+                
+                extras.getString("album")?.let { album ->
+                    searchResult = searchResult.filter { 
+                        it.mediaMetadata.albumTitle?.toString() == album 
+                    }
+                }
+                
+                extras.getString("tag")?.let { tag ->
+                    searchResult = searchResult.filter { item ->
+                        item.mediaMetadata.extras?.getStringArrayList("tags")?.contains(tag) ?: false
+                    }
+                }
+                
+                extras.getInt("minLikes", -1).let { minLikes ->
+                    if (minLikes >= 0) {
+                        searchResult = searchResult.filter { item ->
+                            (item.mediaMetadata.extras?.getInt("likes") ?: 0) >= minLikes
+                        }
+                    }
+                }
+                
                 val fromIndex = max((page - 1) * pageSize, searchResult.size - 1)
                 val toIndex = max(fromIndex + pageSize, searchResult.size)
                 LibraryResult.ofItemList(searchResult.subList(fromIndex, toIndex), params)
@@ -421,8 +613,8 @@ open class MusicService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: MutableList<MediaItem>
         ): ListenableFuture<MutableList<MediaItem>> {
-            return callWhenMusicSourceReady {
-                mediaItems.map { browseTree.getMediaItemByMediaId(it.mediaId)!! }.toMutableList()
+            return callWhenSourcesReady {
+                mediaItems.map { multiBrowseTree.getMediaItemByMediaId(it.mediaId)!! }.toMutableList()
             }
         }
 
