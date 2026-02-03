@@ -32,6 +32,7 @@ const val UAMP_GUESS_LIKE_ROOT = "__GUESS_LIKE__"
 const val UAMP_POPULAR_ROOT = "__POPULAR__"
 const val UAMP_TREASURED_PLAYLISTS_ROOT = "__TREASURED_PLAYLISTS__"
 const val UAMP_ALL_SONGS_ROOT = "__ALL_SONGS__"
+const val UAMP_ALL_PLAYLISTS_ROOT = "__ALL_PLAYLISTS__"
 
 /**
  * Enhanced BrowseTree that supports multiple API sources for MockServer integration.
@@ -44,6 +45,8 @@ class MultiBrowseTree(
     private val guessLikeSource: MusicSource,
     private val popularSource: MusicSource,
     private val treasuredSource: MusicSource,
+    private val allSongsSource: MusicSource,
+    private val allPlaylistsSource: AllPlaylistsSource,
     private val recentMediaId: String? = null
 ) {
     private val mediaIdToChildren = mutableMapOf<String, MutableList<MediaItem>>()
@@ -111,6 +114,32 @@ class MultiBrowseTree(
         }.build()
         mediaIdToSource[UAMP_TREASURED_PLAYLISTS_ROOT] = treasuredSource
 
+        // Add All Songs category
+        val allSongsMetadata = MediaMetadata.Builder().apply {
+            setTitle("全部歌曲")
+            setFolderType(MediaMetadata.FOLDER_TYPE_MIXED)
+            setIsBrowsable(true)
+            setIsPlayable(false)
+        }.build()
+        rootList += MediaItem.Builder().apply {
+            setMediaId(UAMP_ALL_SONGS_ROOT)
+            setMediaMetadata(allSongsMetadata)
+        }.build()
+        mediaIdToSource[UAMP_ALL_SONGS_ROOT] = allSongsSource
+
+        // Add All Playlists category
+        val allPlaylistsMetadata = MediaMetadata.Builder().apply {
+            setTitle("全部歌单")
+            setFolderType(MediaMetadata.FOLDER_TYPE_PLAYLISTS)
+            setIsBrowsable(true)
+            setIsPlayable(false)
+        }.build()
+        rootList += MediaItem.Builder().apply {
+            setMediaId(UAMP_ALL_PLAYLISTS_ROOT)
+            setMediaMetadata(allPlaylistsMetadata)
+        }.build()
+        mediaIdToSource[UAMP_ALL_PLAYLISTS_ROOT] = allPlaylistsSource
+
         // Add Albums category (from main source)
         val albumsMetadata = MediaMetadata.Builder().apply {
             setTitle(context.getString(R.string.albums_title))
@@ -136,6 +165,8 @@ class MultiBrowseTree(
         buildCategoryChildren(UAMP_GUESS_LIKE_ROOT, guessLikeSource)
         buildCategoryChildren(UAMP_POPULAR_ROOT, popularSource)
         buildCategoryChildren(UAMP_TREASURED_PLAYLISTS_ROOT, treasuredSource)
+        buildCategoryChildren(UAMP_ALL_SONGS_ROOT, allSongsSource)
+        buildCategoryChildren(UAMP_ALL_PLAYLISTS_ROOT, allPlaylistsSource)
         
         // Build albums from main source
         mainSource.forEach { mediaItem ->
@@ -189,13 +220,28 @@ class MultiBrowseTree(
     fun getSourceForCategory(categoryId: String): MusicSource? = mediaIdToSource[categoryId]
 
     /**
+     * Gets songs for a specific playlist
+     */
+    suspend fun getPlaylistSongs(playlistId: String): List<MediaItem>? {
+        return allPlaylistsSource.getPlaylistSongs(playlistId)
+    }
+
+    /**
      * Searches across all sources
      */
     fun searchAll(query: String, extras: android.os.Bundle): List<MediaItem> {
         val results = mutableListOf<MediaItem>()
         
         // Search in each source
-        listOf(mainSource, dailySource, guessLikeSource, popularSource, treasuredSource).forEach { source ->
+        listOf(
+            mainSource, 
+            dailySource, 
+            guessLikeSource, 
+            popularSource, 
+            treasuredSource,
+            allSongsSource,
+            allPlaylistsSource as MusicSource
+        ).forEach { source ->
             results.addAll(source.search(query, extras))
         }
         

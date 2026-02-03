@@ -198,3 +198,47 @@ class AllSongsApiSource : ApiSource("/api/songs?pageSize=50") {
         return response.items.map { jsonMusicToMediaItem(it) }
     }
 }
+
+/**
+ * Source for all playlists: GET /api/playlists
+ */
+class AllPlaylistsSource : ApiSource("/api/playlists") {
+    override suspend fun fetchAndParseCatalog(url: String): List<MediaItem>? {
+        val response = downloadJson(url, Array<ApiPlaylist>::class.java) ?: return null
+        
+        // Convert playlists to browsable MediaItems
+        return response.mapNotNull { playlist ->
+            // Create a folder-type MediaItem for the playlist
+            val playlistMetadata = MediaMetadata.Builder()
+                .setTitle(playlist.title)
+                .setDisplayTitle(playlist.title)
+                .setDescription(playlist.description)
+                .setFolderType(MediaMetadata.FOLDER_TYPE_PLAYLISTS)
+                .setIsBrowsable(true)
+                .setIsPlayable(false)
+                .apply {
+                    val extras = Bundle()
+                    extras.putString("playlistId", playlist.id)
+                    extras.putString("creatorId", playlist.creatorId)
+                    extras.putStringArrayList("tags", ArrayList(playlist.tags))
+                    extras.putBoolean("isList", playlist.isList)
+                    setExtras(extras)
+                }
+                .build()
+            
+            MediaItem.Builder()
+                .setMediaId("playlist_${playlist.id}")
+                .setMediaMetadata(playlistMetadata)
+                .build()
+        }
+    }
+    
+    /**
+     * Get songs for a specific playlist by ID
+     */
+    suspend fun getPlaylistSongs(playlistId: String): List<MediaItem>? {
+        val url = "$BASE_URL/api/playlists/$playlistId"
+        val playlist = downloadJson(url, ApiPlaylist::class.java) ?: return null
+        return playlist.songs.map { jsonMusicToMediaItem(it) }
+    }
+}

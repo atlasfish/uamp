@@ -56,6 +56,8 @@ import com.example.android.uamp.media.library.DailyRecommendSource
 import com.example.android.uamp.media.library.GuessLikeSource
 import com.example.android.uamp.media.library.PopularSource
 import com.example.android.uamp.media.library.TreasuredPlaylistsSource
+import com.example.android.uamp.media.library.AllSongsApiSource
+import com.example.android.uamp.media.library.AllPlaylistsSource
 import com.example.android.uamp.media.library.STATE_INITIALIZED
 import com.example.android.uamp.media.library.STATE_ERROR
 import com.example.android.uamp.media.library.UAMP_BROWSABLE_ROOT
@@ -98,6 +100,8 @@ open class MusicService : MediaLibraryService() {
     private lateinit var guessLikeSource: MusicSource
     private lateinit var popularSource: MusicSource
     private lateinit var treasuredPlaylistsSource: MusicSource
+    private lateinit var allSongsSource: MusicSource
+    private lateinit var allPlaylistsSource: AllPlaylistsSource
     private lateinit var packageValidator: PackageValidator
     private lateinit var storage: PersistentStorage
 
@@ -112,7 +116,9 @@ open class MusicService : MediaLibraryService() {
             dailyRecommendSource,
             guessLikeSource,
             popularSource,
-            treasuredPlaylistsSource
+            treasuredPlaylistsSource,
+            allSongsSource,
+            allPlaylistsSource
         )
     }
 
@@ -226,6 +232,8 @@ open class MusicService : MediaLibraryService() {
         guessLikeSource = GuessLikeSource()
         popularSource = PopularSource()
         treasuredPlaylistsSource = TreasuredPlaylistsSource()
+        allSongsSource = AllSongsApiSource()
+        allPlaylistsSource = AllPlaylistsSource()
         
         // Load all sources asynchronously
         serviceScope.launch {
@@ -234,6 +242,8 @@ open class MusicService : MediaLibraryService() {
             guessLikeSource.load()
             popularSource.load()
             treasuredPlaylistsSource.load()
+            allSongsSource.load()
+            allPlaylistsSource.load()
         }
 
         packageValidator = PackageValidator(this, R.xml.allowed_media_browser_callers)
@@ -324,7 +334,9 @@ open class MusicService : MediaLibraryService() {
             dailyRecommendSource, 
             guessLikeSource, 
             popularSource, 
-            treasuredPlaylistsSource
+            treasuredPlaylistsSource,
+            allSongsSource,
+            allPlaylistsSource as MusicSource
         )
         
         // Check if all sources are ready
@@ -424,6 +436,31 @@ open class MusicService : MediaLibraryService() {
                     )
                 )
             }
+            
+            // Handle playlist expansion - if parentId starts with "playlist_"
+            if (parentId.startsWith("playlist_")) {
+                val playlistId = parentId.removePrefix("playlist_")
+                return executorService.submit<LibraryResult<ImmutableList<MediaItem>>> {
+                    // Use coroutine to load playlist songs
+                    val songs = kotlinx.coroutines.runBlocking {
+                        multiBrowseTree.getPlaylistSongs(playlistId)
+                    }
+                    if (songs != null) {
+                        val fromIndex = (page * pageSize).coerceIn(0, songs.size)
+                        val toIndex = (fromIndex + pageSize).coerceIn(fromIndex, songs.size)
+                        LibraryResult.ofItemList(
+                            songs.subList(fromIndex, toIndex),
+                            LibraryParams.Builder().build()
+                        )
+                    } else {
+                        LibraryResult.ofItemList(
+                            ImmutableList.of(),
+                            LibraryParams.Builder().build()
+                        )
+                    }
+                }
+            }
+            
             return callWhenSourcesReady {
                 val children = multiBrowseTree[parentId] ?: ImmutableList.of()
 
