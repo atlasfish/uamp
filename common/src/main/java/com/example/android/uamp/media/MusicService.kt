@@ -56,6 +56,8 @@ import com.example.android.uamp.media.library.DailyRecommendSource
 import com.example.android.uamp.media.library.GuessLikeSource
 import com.example.android.uamp.media.library.PopularSource
 import com.example.android.uamp.media.library.TreasuredPlaylistsSource
+import com.example.android.uamp.media.library.STATE_INITIALIZED
+import com.example.android.uamp.media.library.STATE_ERROR
 import com.example.android.uamp.media.library.UAMP_BROWSABLE_ROOT
 import com.example.android.uamp.media.library.UAMP_RECENT_ROOT
 import com.google.android.gms.cast.framework.CastContext
@@ -317,7 +319,6 @@ open class MusicService : MediaLibraryService() {
      * @param action The function to be called when all sources are ready.
      */
     private fun <T> callWhenSourcesReady(action: () -> T): ListenableFuture<T> {
-        val conditionVariable = ConditionVariable()
         val sources = listOf(
             musicSource, 
             dailyRecommendSource, 
@@ -328,14 +329,27 @@ open class MusicService : MediaLibraryService() {
         
         // Check if all sources are ready
         val allReady = sources.all { source ->
-            source.whenReady(openWhenReady(conditionVariable))
+            when (source.state) {
+                STATE_INITIALIZED -> true
+                STATE_ERROR -> {
+                    Log.w(TAG, "Source in error state, considering as ready")
+                    true
+                }
+                else -> false
+            }
         }
         
         return if (allReady) {
             Futures.immediateFuture(action())
         } else {
             executorService.submit<T> {
-                conditionVariable.block()
+                // Wait for all sources to be ready
+                sources.forEach { source ->
+                    val conditionVariable = ConditionVariable()
+                    if (!source.whenReady(openWhenReady(conditionVariable))) {
+                        conditionVariable.block()
+                    }
+                }
                 action()
             }
         }
