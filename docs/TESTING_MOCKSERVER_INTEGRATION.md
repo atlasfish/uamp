@@ -9,7 +9,9 @@ This document provides guidance on testing the MockServer API integration in the
 
 ## API Endpoints Integrated
 
-### 1. Featured Categories (Each with its own Media Library)
+### All API Endpoints (Each with its own Media Library)
+All endpoints are exposed as separate browsable categories under ROOT:
+
 - **今日推荐 (Daily Recommend)**: `/api/recommend/daily`
   - Returns 10 random songs
   - Accessible as a browsable category in the root menu
@@ -26,9 +28,18 @@ This document provides guidance on testing the MockServer API integration in the
   - Returns 5 random playlists with their songs
   - Accessible as a browsable category in the root menu
 
-### 2. Main Catalog
+- **全部歌曲 (All Songs)**: `/api/songs`
+  - Returns paginated list of all songs (default 50 per page)
+  - Accessible as a browsable category in the root menu
+
+- **全部歌单 (All Playlists)**: `/api/playlists`
+  - Returns list of all playlists
+  - Accessible as a browsable category in the root menu
+  - Click on any playlist to expand and see its songs
+
 - **Albums**: Built from `/music_list.json`
   - Organizes songs by album
+  - Accessible as a browsable category in the root menu
 
 ## Enhanced Search Functionality
 
@@ -69,8 +80,12 @@ mediaController.search("popular", params)
    - 猜你喜欢 (Guess Like)
    - 最近流行 (Popular)
    - 宝藏歌单 (Treasured Playlists)
+   - 全部歌曲 (All Songs)
+   - 全部歌单 (All Playlists)
    - Albums
 4. Click on each category and verify songs are loaded
+5. Click on "全部歌单" and verify playlists are displayed
+6. Click on a playlist and verify its songs are loaded
 
 ### 2. Search Testing
 1. Use the search feature in Android Auto or the media browser

@@ -10,7 +10,7 @@ UAMP has been enhanced to integrate with the MockServer API, providing multiple 
 ## New Features
 
 ### 1. Multiple Music Sources
-The app now browses music from multiple API endpoints:
+The app now browses music from multiple API endpoints, all accessible under ROOT:
 
 | Category | API Endpoint | Description |
 |----------|-------------|-------------|
@@ -18,6 +18,8 @@ The app now browses music from multiple API endpoints:
 | 猜你喜欢 | `/api/recommend/guess` | 10 songs you might like |
 | 最近流行 | `/api/recommend/popular` | Top 20 popular songs |
 | 宝藏歌单 | `/api/playlists/treasured` | 5 featured playlists |
+| 全部歌曲 | `/api/songs` | All songs (paginated) |
+| 全部歌单 | `/api/playlists` | All playlists (browsable, click to expand) |
 | Albums | `/music_list.json` | Full music catalog organized by album |
 
 ### 2. Enhanced Search with Filtering
@@ -98,7 +100,21 @@ The MockServer must return data in this format:
 4. **GET `/api/playlists/treasured`**
    - Returns: Array of 5 playlist objects
 
-5. **GET `/music_list.json`**
+5. **GET `/api/playlists/treasured`**
+   - Returns: Array of 5 playlist objects
+
+6. **GET `/api/songs`**
+   - Parameters: `page`, `pageSize`, `keyword`, `genre`, `tag`
+   - Returns: `{ page, pageSize, total, items: [song objects] }`
+
+7. **GET `/api/playlists`**
+   - Parameters: `keyword`, `includeSong`
+   - Returns: Array of playlist objects
+
+8. **GET `/api/playlists/{id}`**
+   - Returns: Single playlist object with full song details
+
+9. **GET `/music_list.json`**
    - Returns: `{ "music": [/* array of song objects */] }`
 
 ## Usage Examples
@@ -109,7 +125,10 @@ The MockServer must return data in this format:
 3. Navigate through the categories:
    - 今日推荐 for daily picks
    - 最近流行 for trending songs
+   - 全部歌曲 for browsing all songs
+   - 全部歌单 for browsing all playlists
    - Albums for browsing by album
+4. Click on a playlist to expand and view its songs
 
 ### Searching
 Use the search feature in Android Auto or media browser:
@@ -130,12 +149,23 @@ MusicService (MediaLibraryService)
 ├── dailyRecommendSource → /api/recommend/daily
 ├── guessLikeSource → /api/recommend/guess
 ├── popularSource → /api/recommend/popular
-└── treasuredPlaylistsSource → /api/playlists/treasured
+├── treasuredPlaylistsSource → /api/playlists/treasured
+├── allSongsSource → /api/songs
+└── allPlaylistsSource → /api/playlists
         ↓
     MultiBrowseTree
         ↓
     MediaLibrarySession (exposed to clients)
 ```
+
+All sources are accessible as browsable categories under ROOT:
+- 今日推荐 (Daily Recommend)
+- 猜你喜欢 (Guess Like)
+- 最近流行 (Popular)
+- 宝藏歌单 (Treasured Playlists)
+- 全部歌曲 (All Songs)
+- 全部歌单 (All Playlists)
+- Albums
 
 ## Configuration
 
