@@ -33,14 +33,14 @@ UAMP 实现了 Android 的 `MediaLibraryService`，允许外部应用（如 Andr
 ### Service 组件名称
 
 ```
-Package: com.example.android.uamp
+Package: com.example.android.uamp.next
 Class: com.example.android.uamp.media.MusicService
 ```
 
 ### 完整 ComponentName
 
 ```kotlin
-ComponentName("com.example.android.uamp", "com.example.android.uamp.media.MusicService")
+ComponentName("com.example.android.uamp.next", "com.example.android.uamp.media.MusicService")
 ```
 
 ### Manifest 配置
@@ -96,7 +96,7 @@ class UampMediaConnection(private val context: Context) {
     
     suspend fun connect() {
         val serviceComponent = ComponentName(
-            "com.example.android.uamp",
+            "com.example.android.uamp.next",
             "com.example.android.uamp.media.MusicService"
         )
         
@@ -149,7 +149,7 @@ class UampMediaConnectionCompat(context: Context) {
     
     private val mediaBrowser = MediaBrowserCompat(
         context,
-        ComponentName("com.example.android.uamp", 
+        ComponentName("com.example.android.uamp.next", 
                      "com.example.android.uamp.media.MusicService"),
         connectionCallback,
         null
@@ -429,7 +429,7 @@ class UampClient(private val context: Context) {
     suspend fun connect(): Boolean {
         return try {
             val serviceComponent = ComponentName(
-                "com.example.android.uamp",
+                "com.example.android.uamp.next",
                 "com.example.android.uamp.media.MusicService"
             )
             
