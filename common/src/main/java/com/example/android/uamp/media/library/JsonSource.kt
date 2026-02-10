@@ -81,10 +81,10 @@ internal class JsonSource(private val source: Uri) : AbstractMusicSource() {
                 // itself. We need to fix them up here to turn them into absolute paths.
                 catalogUri.scheme?.let { scheme ->
                     if (!song.source.startsWith(scheme)) {
-                        song.source = baseUri + song.source.removePrefix("/")
+                        song.source = baseUri + song.source
                     }
                     if (!song.image.startsWith(scheme)) {
-                        song.image = baseUri + song.image.removePrefix("/")
+                        song.image = baseUri + song.image
                     }
                 }
 
