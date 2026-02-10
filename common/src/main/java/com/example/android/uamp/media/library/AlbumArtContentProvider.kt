@@ -22,12 +22,14 @@ import android.content.ContentValues
 import android.database.Cursor
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import com.bumptech.glide.Glide
-import com.bumptech.glide.load.engine.DiskCacheStrategy
-import com.bumptech.glide.request.RequestOptions
+import coil.Coil
+import coil.request.CachePolicy
+import coil.request.ImageRequest
+import coil.request.SuccessResult
+import coil.request.ErrorResult
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.FileNotFoundException
-import java.util.concurrent.TimeUnit
 
 // The amount of time to wait for the album art file to download before timing out.
 const val DOWNLOAD_TIMEOUT_SECONDS = 30L
@@ -65,59 +67,50 @@ internal class AlbumArtContentProvider : ContentProvider() {
 
         if (!file.exists()) {
             val remoteUri = uriMap[uri] ?: throw FileNotFoundException(uri.path)
-            var lastException: Exception? = null
-            var success = false
 
-            // Retry loop to handle transient network failures
-            for (i in 1..3) {
-                try {
-                    // Use Glide to download the album art.
-                    // Use RequestOptions to set specific timeout and cache strategy
-                    val requestOptions = RequestOptions()
-                        .diskCacheStrategy(DiskCacheStrategy.DATA) // Ensure we cache the original file data
-                        .timeout(10000) // Set explicit connection timeout (10s)
+            // Use Coil to download the album art.
+            val imageLoader = Coil.imageLoader(context)
+            val request = ImageRequest.Builder(context)
+                .data(remoteUri.toString())
+                .diskCachePolicy(CachePolicy.ENABLED) // Ensure we download to disk
+                .memoryCachePolicy(CachePolicy.DISABLED) // We just need the file
+                .build()
 
-                    val cacheFile = Glide.with(context)
-                        .asFile()
-                        .apply(requestOptions)
-                        .load(remoteUri.toString()) // Convert Uri to String to ensure HttpUrlFetcher is used
-                        .submit()
-                        // Use a slightly shorter timeout for the get() than the global one,
-                        // or rely on Glide's timeout.
-                        // We give it enough time to complete the download.
-                        .get(DOWNLOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-
-                    // Rename the file Glide created to match our own scheme.
-                    if (cacheFile.renameTo(file)) {
-                        success = true
-                    } else {
-                        // If rename fails, we use the cacheFile directly.
-                        // This creates a temporary solution where we serve the file from Glide's cache,
-                        // but we won't have it at our desired location for next time.
-                        file = cacheFile
-                        success = true
-                    }
-
-                    if (success) break
-
-                } catch (e: Exception) {
-                    lastException = e
-                    if (e is java.util.concurrent.ExecutionException && e.cause is com.bumptech.glide.load.engine.GlideException) {
-                        // Log but don't throw yet
-                        val glideException = e.cause as com.bumptech.glide.load.engine.GlideException
-                        glideException.logRootCauses("AlbumArtContentProvider - Attempt $i")
-                    } else {
-                        e.printStackTrace()
-                    }
-
-                    // Wait a bit before retrying
-                    try { Thread.sleep(200) } catch (ignored: InterruptedException) {}
+            try {
+                // Execute the request synchronously
+                val result = runBlocking {
+                     imageLoader.execute(request)
                 }
-            }
 
-            if (!success) {
-               val e = lastException ?: FileNotFoundException("Failed to download $remoteUri after 3 attempts")
-               throw FileNotFoundException("Failed to download $remoteUri: ${e.message}")
+                if (result is SuccessResult) {
+                    val diskCacheKey = result.diskCacheKey
+                    if (diskCacheKey != null) {
+                        val snapshot = imageLoader.diskCache?.openSnapshot(diskCacheKey)
+                        if (snapshot != null) {
+                            val data = snapshot.data
+                            // Copy the file from Coil's cache to our destination
+                            // Coil 2.0+ uses java.nio.file.Path for data
+                            val sourceFile = data.toFile()
+
+                            file.parentFile?.mkdirs()
+                            sourceFile.copyTo(file, overwrite = true)
+
+                            // Close the snapshot
+                            snapshot.close()
+                        } else {
+                            throw FileNotFoundException("File not found in Coil disk cache")
+                        }
+                    } else {
+                         throw FileNotFoundException("Coil did not return a disk cache key")
+                    }
+                } else if (result is ErrorResult) {
+                    throw FileNotFoundException("Coil failed to download image: ${result.throwable.message}")
+                }
+
+            } catch (e: Exception) {
+                val errorMessage = "Failed to download $remoteUri with Coil: ${e.message}"
+                System.err.println(errorMessage)
+                throw FileNotFoundException(errorMessage)
             }
         }
         return ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
