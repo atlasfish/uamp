@@ -47,6 +47,9 @@ import androidx.media3.session.MediaLibraryService
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.mp3.Mp3Extractor
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.example.android.uamp.media.library.BrowseTree
 import com.example.android.uamp.media.library.JsonSource
 import com.example.android.uamp.media.library.MEDIA_SEARCH_SUPPORTED
@@ -164,11 +167,16 @@ open class MusicService : MediaLibraryService() {
      * for details.
      */
     private val exoPlayer: Player by lazy {
-        val player = ExoPlayer.Builder(this).build().apply {
-            setAudioAttributes(uAmpAudioAttributes, true)
-            setHandleAudioBecomingNoisy(true)
-            addListener(playerListener)
-        }
+        val extractorsFactory = DefaultExtractorsFactory()
+            .setMp3ExtractorFlags(Mp3Extractor.FLAG_DISABLE_ID3_METADATA)
+        val mediaSourceFactory = DefaultMediaSourceFactory(this, extractorsFactory)
+        val player = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build().apply {
+                setAudioAttributes(uAmpAudioAttributes, true)
+                setHandleAudioBecomingNoisy(true)
+                addListener(playerListener)
+            }
         player.addAnalyticsListener(EventLogger(null, "exoplayer-uamp"))
         player
     }
