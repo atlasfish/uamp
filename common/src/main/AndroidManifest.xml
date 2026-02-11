@@ -38,6 +38,11 @@
         </receiver>
 
         <provider
+            android:name=".library.LyricsContentProvider"
+            android:authorities="com.example.android.uamp.lyrics"
+            android:exported="true" />
+
+        <provider
             android:name=".library.AlbumArtContentProvider"
             android:authorities="com.example.android.uamp"
             android:exported="true" />

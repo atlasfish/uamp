@@ -109,20 +109,38 @@ abstract class ApiSource(private val endpoint: String) : AbstractMusicSource() {
             BASE_URL + song.image
         }
 
+        val lyricsUrl = if (song.lyrics.isEmpty()) {
+            ""
+        } else if (song.lyrics.startsWith("http")) {
+            song.lyrics
+        } else {
+            BASE_URL + song.lyrics
+        }
+
         val jsonImageUri = Uri.parse(imageUrl)
         val imageUri = AlbumArtContentProvider.mapUri(jsonImageUri)
         
+        val lyricsUri = if (lyricsUrl.isNotEmpty()) {
+             LyricsContentProvider.mapUri(Uri.parse(lyricsUrl))
+        } else {
+             Uri.EMPTY
+        }
+
         val mediaMetadata = MediaMetadata.Builder()
             .from(song)
             .apply {
                 setArtworkUri(imageUri)
                 val extras = Bundle()
                 extras.putString(JsonSource.ORIGINAL_ARTWORK_URI_KEY, jsonImageUri.toString())
+                if (lyricsUri != Uri.EMPTY) {
+                   extras.putString("com.example.android.uamp.LYRICS_URI", lyricsUri.toString())
+                }
                 extras.putInt("likes", song.likes)
                 extras.putBoolean("isList", song.isList)
                 // Store tags as ArrayList for easier retrieval
                 extras.putStringArrayList("tags", ArrayList(song.tags))
                 setExtras(extras)
+                setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
             }
             .build()
 
@@ -221,6 +239,7 @@ class AllPlaylistsSource : ApiSource("/api/playlists") {
                 .setFolderType(MediaMetadata.FOLDER_TYPE_PLAYLISTS)
                 .setIsBrowsable(true)
                 .setIsPlayable(false)
+                .setMediaType(MediaMetadata.MEDIA_TYPE_PLAYLIST)
                 .apply {
                     val extras = Bundle()
                     extras.putString("playlistId", playlist.id)

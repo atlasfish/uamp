@@ -86,10 +86,19 @@ internal class JsonSource(private val source: Uri) : AbstractMusicSource() {
                     if (!song.image.startsWith(scheme)) {
                         song.image = baseUri + song.image
                     }
+                    if (song.lyrics.isNotEmpty() && !song.lyrics.startsWith(scheme)) {
+                        song.lyrics = baseUri + song.lyrics
+                    }
                 }
 
                 val jsonImageUri = Uri.parse(song.image)
                 val imageUri = AlbumArtContentProvider.mapUri(jsonImageUri)
+                val lyricsUri = if (song.lyrics.isNotEmpty()) {
+                    LyricsContentProvider.mapUri(Uri.parse(song.lyrics))
+                } else {
+                    Uri.EMPTY
+                }
+
                 val mediaMetadata = MediaMetadata.Builder()
                     .from(song)
                     .apply {
@@ -97,6 +106,9 @@ internal class JsonSource(private val source: Uri) : AbstractMusicSource() {
                         // Keep the original artwork URI for being included in Cast metadata object.
                         val extras = Bundle()
                         extras.putString(ORIGINAL_ARTWORK_URI_KEY, jsonImageUri.toString())
+                        if (lyricsUri != Uri.EMPTY) {
+                            extras.putString("com.example.android.uamp.LYRICS_URI", lyricsUri.toString())
+                        }
                         setExtras(extras)
                     }
                     .build()
@@ -206,6 +218,7 @@ class JsonMusic {
     var totalTrackCount: Long = 0
     var duration: Long = -1
     var site: String = ""
+    var lyrics: String = ""
     var tags: List<String> = emptyList()
     var isList: Boolean = false
     var likes: Int = 0
